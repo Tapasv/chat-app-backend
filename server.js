@@ -19,25 +19,35 @@ const { DBcnnctn } = require('./DBcnnctn');
 const port = 5000;
 const server = http.createServer(app);
 
-// CORS Setup (Updated)
+// Allowed frontend origins
 const allowedOrigins = [
     "http://192.168.0.102:5173",
     "http://192.168.0.103:5173",
     "http://192.168.0.107:5173",
     "http://localhost:5173",
-    "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app"
+    "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app",
+    "https://chat-app-frontend-7lz5m48ft-tapasvs-projects.vercel.app"
 ];
 
+// CORS middleware
 app.use(cors({
     origin: function(origin, callback) {
-        // allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
+        if (!origin) return callback(null, true); // mobile apps, curl, etc.
         if (allowedOrigins.indexOf(origin) === -1) {
-            const msg = 'CORS policy: This origin is not allowed.';
-            return callback(new Error(msg), false);
+            return callback(new Error("CORS policy: This origin is not allowed."), false);
         }
         return callback(null, true);
     },
+    methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+    allowedHeaders: ["Content-Type","Authorization"],
+    credentials: true
+}));
+
+// Explicitly handle preflight OPTIONS requests
+app.options('*', cors({
+    origin: allowedOrigins,
+    methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+    allowedHeaders: ["Content-Type","Authorization"],
     credentials: true
 }));
 
@@ -46,16 +56,11 @@ app.use(express.json());
 // DB Connection
 DBcnnctn();
 
-// Create directories
+// Create uploads directories if they don't exist
 const uploadDir = path.join(__dirname, 'uploads');
 const profilesDir = path.join(__dirname, 'uploads/profiles');
-
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-if (!fs.existsSync(profilesDir)) {
-    fs.mkdirSync(profilesDir, { recursive: true });
-}
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+if (!fs.existsSync(profilesDir)) fs.mkdirSync(profilesDir, { recursive: true });
 
 // Socket.IO Setup
 const io = new Server(server, {
@@ -65,7 +70,7 @@ const io = new Server(server, {
     }
 });
 
-// Track online users and pending messages
+// Online users and pending notifications
 const onlineUsers = new Map();
 const pendingNotifications = new Map();
 
@@ -79,7 +84,7 @@ app.use('/api/chat', authchat);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use("/api/friends", friendRoutes);
 
-// Socket.IO Events
+// Socket.IO events
 io.on("connection", (socket) => {
     const Username = socket.handshake.auth.Username || "Anonymous";
     const userID = socket.handshake.auth.userid?.toString();
@@ -90,9 +95,7 @@ io.on("connection", (socket) => {
         // Send pending notifications
         if (pendingNotifications.has(userID)) {
             const notifications = pendingNotifications.get(userID);
-            notifications.forEach(notif => {
-                socket.emit("newMessageNotification", notif);
-            });
+            notifications.forEach(notif => socket.emit("newMessageNotification", notif));
             pendingNotifications.delete(userID);
         }
     }
@@ -113,46 +116,27 @@ io.on("connection", (socket) => {
     // Private Chat
     socket.on("sendPrivateMessage", async (data) => {
         try {
-            console.log("Received message:", data);
-
             const sender = await User.findById(data.sender);
             const receiver = await User.findById(data.receiver);
 
-            if (!sender || !receiver) {
-                return socket.emit("errorMessage", { message: "User not found" });
-            }
+            if (!sender || !receiver) return socket.emit("errorMessage", { message: "User not found" });
 
-            // Check if friends
             const senderFriendsStr = sender.friends.map(id => id.toString());
             if (!senderFriendsStr.includes(data.receiver.toString())) {
-                console.log("Not friends");
                 return socket.emit("errorMessage", { message: "You can only message friends" });
             }
 
-            // Save message
-            const newMsg = new Message({
-                sender: data.sender,
-                receiver: data.receiver,
-                text: data.text
-            });
-
+            const newMsg = new Message({ sender: data.sender, receiver: data.receiver, text: data.text });
             await newMsg.save();
-            console.log("Message saved:", newMsg._id);
 
             const populatedMsg = await Message.findById(newMsg._id)
                 .populate("sender", "Username profilePicture")
                 .populate("receiver", "Username profilePicture");
 
-            const receiverId = data.receiver.toString();
-            const senderId = data.sender.toString();
-
-            // Emit to receiver
-            const receiverSocketId = onlineUsers.get(receiverId);
+            const receiverSocketId = onlineUsers.get(data.receiver.toString());
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("receivePrivateMessage", populatedMsg);
-                console.log("Message sent to receiver");
             } else {
-                // Receiver is offline, store notification
                 const notification = {
                     sender: {
                         _id: sender._id,
@@ -162,24 +146,16 @@ io.on("connection", (socket) => {
                     message: data.text,
                     timestamp: new Date()
                 };
-
-                if (!pendingNotifications.has(receiverId)) {
-                    pendingNotifications.set(receiverId, []);
-                }
-                pendingNotifications.get(receiverId).push(notification);
-                console.log("Message stored for offline user");
+                if (!pendingNotifications.has(data.receiver.toString())) pendingNotifications.set(data.receiver.toString(), []);
+                pendingNotifications.get(data.receiver.toString()).push(notification);
             }
 
-            // Emit to sender's current socket
+            // Emit to sender current socket
             socket.emit("receivePrivateMessage", populatedMsg);
-            console.log("Message sent to sender (current socket)");
 
-            // Emit to sender's other devices only
-            const senderSocketId = onlineUsers.get(senderId);
-            if (senderSocketId && senderSocketId !== socket.id) {
-                io.to(senderSocketId).emit("receivePrivateMessage", populatedMsg);
-                console.log("Message sent to sender's other devices");
-            }
+            // Emit to sender other devices
+            const senderSocketId = onlineUsers.get(data.sender.toString());
+            if (senderSocketId && senderSocketId !== socket.id) io.to(senderSocketId).emit("receivePrivateMessage", populatedMsg);
 
         } catch (error) {
             console.error("Error in sendPrivateMessage:", error);
@@ -188,82 +164,17 @@ io.on("connection", (socket) => {
 
     // Typing Indicators
     socket.on("TypingPrivate", ({ username, receiver }) => {
-        const senderId = socket.handshake.auth.userid;
         const receiverSocketId = onlineUsers.get(receiver?.toString());
-        if (receiverSocketId) io.to(receiverSocketId).emit("UserTypingPrivate", { username, senderId });
+        if (receiverSocketId) io.to(receiverSocketId).emit("UserTypingPrivate", { username, senderId: socket.handshake.auth.userid });
     });
 
     socket.on("StopTypingPrivate", ({ username, receiver }) => {
-        const senderId = socket.handshake.auth.userid;
         const receiverSocketId = onlineUsers.get(receiver?.toString());
-        if (receiverSocketId) io.to(receiverSocketId).emit("UserStopTypingPrivate", { username, senderId });
-    });
-
-    // WebRTC Signaling for Voice/Video calls
-    socket.on("callUser", async ({ to, from, signalData, callType }) => {
-        try {
-            console.log("Call initiated:", { from, to, callType });
-
-            const receiverSocketId = onlineUsers.get(to);
-            if (receiverSocketId) {
-                const caller = await User.findById(from).select('_id Username profilePicture');
-
-                console.log("Sending call to receiver:", to);
-                io.to(receiverSocketId).emit("incomingCall", {
-                    from,
-                    caller: caller,
-                    signalData,
-                    callType
-                });
-                console.log("Call notification sent");
-            } else {
-                console.log("Receiver is offline");
-                socket.emit("callFailed", { message: "User is offline" });
-            }
-        } catch (error) {
-            console.error("Call error:", error);
-        }
-    });
-
-    socket.on("answerCall", ({ to, signalData }) => {
-        console.log("Call answered, sending signal to:", to);
-        const callerSocketId = onlineUsers.get(to);
-        if (callerSocketId) {
-            io.to(callerSocketId).emit("callAccepted", signalData);
-            console.log("Answer sent to caller");
-        }
-    });
-
-    // ICE Candidate Exchange
-    socket.on("iceCandidate", ({ to, candidate }) => {
-        console.log("Relaying ICE candidate to:", to);
-        const receiverSocketId = onlineUsers.get(to);
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit("iceCandidate", { candidate });
-            console.log("ICE candidate relayed successfully");
-        } else {
-            console.log("Cannot relay ICE candidate - receiver offline");
-        }
-    });
-
-    socket.on("rejectCall", ({ to }) => {
-        console.log("Call rejected by receiver");
-        const callerSocketId = onlineUsers.get(to);
-        if (callerSocketId) {
-            io.to(callerSocketId).emit("callRejected");
-        }
-    });
-
-    socket.on("endCall", ({ to }) => {
-        console.log("Call ended");
-        const receiverSocketId = onlineUsers.get(to);
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit("callEnded");
-        }
+        if (receiverSocketId) io.to(receiverSocketId).emit("UserStopTypingPrivate", { username, senderId: socket.handshake.auth.userid });
     });
 });
 
-// Start Server
+// Start server
 mongoose.connection.once('open', () => {
     console.log("Connected to Database!");
     server.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port}`));
