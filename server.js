@@ -33,7 +33,7 @@ const allowedOrigins = [
 app.use(cors({
     origin: function(origin, callback) {
         if (!origin) return callback(null, true); // mobile apps, curl, etc.
-        if (allowedOrigins.indexOf(origin) === -1) {
+        if (!allowedOrigins.includes(origin)) {
             return callback(new Error("CORS policy: This origin is not allowed."), false);
         }
         return callback(null, true);
@@ -43,13 +43,22 @@ app.use(cors({
     credentials: true
 }));
 
-// Explicitly handle preflight OPTIONS requests
-app.options('*', cors({
-    origin: allowedOrigins,
-    methods: ["GET","POST","PUT","DELETE","OPTIONS"],
-    allowedHeaders: ["Content-Type","Authorization"],
-    credentials: true
-}));
+// Handle preflight OPTIONS requests safely (no wildcard '*')
+app.use((req, res, next) => {
+    if (req.method === 'OPTIONS') {
+        const origin = req.headers.origin;
+        if (allowedOrigins.includes(origin)) {
+            res.header('Access-Control-Allow-Origin', origin);
+            res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+            res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+            res.header('Access-Control-Allow-Credentials', 'true');
+            return res.sendStatus(204); // No Content
+        } else {
+            return res.sendStatus(403); // Forbidden if origin not allowed
+        }
+    }
+    next();
+});
 
 app.use(express.json());
 
