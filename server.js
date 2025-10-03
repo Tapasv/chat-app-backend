@@ -16,7 +16,7 @@ const Message = require('./Schemas/Message');
 const User = require('./Schemas/User');
 const { DBcnnctn } = require('./DBcnnctn');
 
-const port = 5000;
+const port = process.env.PORT || 5000; // use Render's port
 const server = http.createServer(app);
 
 // Allowed frontend origins
@@ -26,24 +26,27 @@ const allowedOrigins = [
     "http://192.168.0.107:5173",
     "http://localhost:5173",
     "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app",
-    "https://chat-app-frontend-7lz5m48ft-tapasvs-projects.vercel.app"
+    "https://chat-app-frontend-7lz5m48ft-tapasvs-projects.vercel.app",
+    "https://chat-app-frontend-3j6itu05p-tapasvs-projects.vercel.app" // add new frontend
 ];
 
 // CORS middleware
-app.use(cors({
+const corsOptions = {
     origin: function(origin, callback) {
-        if (!origin) return callback(null, true); // mobile apps, curl, etc.
-        if (!allowedOrigins.includes(origin)) {
-            return callback(new Error("CORS policy: This origin is not allowed."), false);
+        if (!origin) return callback(null, true); // allow curl, mobile, server requests
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(null, true); // allow unknown origins if needed, or use false to block
         }
-        return callback(null, true);
     },
-    methods: ["GET","POST","PUT","DELETE","OPTIONS"],
-    allowedHeaders: ["Content-Type","Authorization"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
-}));
+};
+app.use(cors(corsOptions));
 
-// Handle preflight OPTIONS requests safely (no wildcard '*')
+// Handle preflight OPTIONS safely
 app.use((req, res, next) => {
     if (req.method === 'OPTIONS') {
         const origin = req.headers.origin;
@@ -52,9 +55,9 @@ app.use((req, res, next) => {
             res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
             res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
             res.header('Access-Control-Allow-Credentials', 'true');
-            return res.sendStatus(204); // No Content
+            return res.sendStatus(204);
         } else {
-            return res.sendStatus(403); // Forbidden if origin not allowed
+            return res.sendStatus(403);
         }
     }
     next();
@@ -101,7 +104,6 @@ io.on("connection", (socket) => {
     if (userID) {
         onlineUsers.set(userID, socket.id);
 
-        // Send pending notifications
         if (pendingNotifications.has(userID)) {
             const notifications = pendingNotifications.get(userID);
             notifications.forEach(notif => socket.emit("newMessageNotification", notif));
@@ -122,7 +124,6 @@ io.on("connection", (socket) => {
         io.emit("onlineUsers", [...onlineUsers.keys()]);
     });
 
-    // Private Chat
     socket.on("sendPrivateMessage", async (data) => {
         try {
             const sender = await User.findById(data.sender);
@@ -159,10 +160,8 @@ io.on("connection", (socket) => {
                 pendingNotifications.get(data.receiver.toString()).push(notification);
             }
 
-            // Emit to sender current socket
             socket.emit("receivePrivateMessage", populatedMsg);
 
-            // Emit to sender other devices
             const senderSocketId = onlineUsers.get(data.sender.toString());
             if (senderSocketId && senderSocketId !== socket.id) io.to(senderSocketId).emit("receivePrivateMessage", populatedMsg);
 
@@ -171,7 +170,6 @@ io.on("connection", (socket) => {
         }
     });
 
-    // Typing Indicators
     socket.on("TypingPrivate", ({ username, receiver }) => {
         const receiverSocketId = onlineUsers.get(receiver?.toString());
         if (receiverSocketId) io.to(receiverSocketId).emit("UserTypingPrivate", { username, senderId: socket.handshake.auth.userid });
