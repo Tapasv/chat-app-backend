@@ -19,18 +19,28 @@ const { DBcnnctn } = require('./DBcnnctn');
 const port = 5000;
 const server = http.createServer(app);
 
-// CORS Setup
+// CORS Setup (Updated)
+const allowedOrigins = [
+    "http://192.168.0.102:5173",
+    "http://192.168.0.103:5173",
+    "http://192.168.0.107:5173",
+    "http://localhost:5173",
+    "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app"
+];
+
 app.use(cors({
-    origin: [
-        "http://192.168.0.102:5173",
-        "http://192.168.0.103:5173",
-        "http://192.168.0.107:5173",
-        "http://localhost:5173",
-        "https://chat-app-backend-5208.onrender.com",
-        "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app"
-    ],
+    origin: function(origin, callback) {
+        // allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'CORS policy: This origin is not allowed.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
     credentials: true
 }));
+
 app.use(express.json());
 
 // DB Connection
@@ -50,14 +60,7 @@ if (!fs.existsSync(profilesDir)) {
 // Socket.IO Setup
 const io = new Server(server, {
     cors: {
-        origin: [
-            "http://192.168.0.102:5173",
-            "http://192.168.0.103:5173",
-            "http://192.168.0.107:5173",
-            "http://localhost:5173",
-            "https://chat-app-backend-5208.onrender.com",
-            "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app"
-        ],
+        origin: allowedOrigins,
         credentials: true
     }
 });
@@ -167,12 +170,11 @@ io.on("connection", (socket) => {
                 console.log("Message stored for offline user");
             }
 
-            // Emit to sender's current socket (so sender sees it immediately)
-            // This is the critical fix: always send back to the current socket so sender UI updates instantly.
+            // Emit to sender's current socket
             socket.emit("receivePrivateMessage", populatedMsg);
             console.log("Message sent to sender (current socket)");
 
-            // Emit to sender's other devices only (not current socket)
+            // Emit to sender's other devices only
             const senderSocketId = onlineUsers.get(senderId);
             if (senderSocketId && senderSocketId !== socket.id) {
                 io.to(senderSocketId).emit("receivePrivateMessage", populatedMsg);
@@ -204,7 +206,6 @@ io.on("connection", (socket) => {
 
             const receiverSocketId = onlineUsers.get(to);
             if (receiverSocketId) {
-                // Fetch caller details
                 const caller = await User.findById(from).select('_id Username profilePicture');
 
                 console.log("Sending call to receiver:", to);
@@ -233,7 +234,7 @@ io.on("connection", (socket) => {
         }
     });
 
-    // ICE Candidate Exchange - CRITICAL FOR WEBRTC
+    // ICE Candidate Exchange
     socket.on("iceCandidate", ({ to, candidate }) => {
         console.log("Relaying ICE candidate to:", to);
         const receiverSocketId = onlineUsers.get(to);
