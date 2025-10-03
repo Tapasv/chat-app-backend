@@ -25,9 +25,7 @@ const allowedOrigins = [
     "http://192.168.0.103:5173",
     "http://192.168.0.107:5173",
     "http://localhost:5173",
-    "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app",
-    "https://chat-app-frontend-7lz5m48ft-tapasvs-projects.vercel.app",
-    "https://chat-app-frontend-3j6itu05p-tapasvs-projects.vercel.app" // add new frontend
+    "https://chat-app-frontend-qspf0il3i-tapasvs-projects.vercel.app/" // add new frontend
 ];
 
 // CORS middleware
