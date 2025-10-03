@@ -27,7 +27,7 @@ app.use(cors({
         "http://192.168.0.107:5173",
         "http://localhost:5173",
         "https://chat-app-backend-5208.onrender.com",
-        "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app/"
+        "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app"
     ],
     credentials: true
 }));
@@ -56,7 +56,7 @@ const io = new Server(server, {
             "http://192.168.0.107:5173",
             "http://localhost:5173",
             "https://chat-app-backend-5208.onrender.com",
-            "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app/"
+            "https://chat-app-frontend-pz3d4m7vv-tapasvs-projects.vercel.app"
         ],
         credentials: true
     }
