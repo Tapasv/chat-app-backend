@@ -25,7 +25,8 @@ app.use(cors({
         "http://192.168.0.102:5173",
         "http://192.168.0.103:5173",
         "http://192.168.0.107:5173",
-        "http://localhost:5173"
+        "http://localhost:5173",
+        "https://chat-app-backend-5208.onrender.com"
     ],
     credentials: true
 }));
@@ -52,7 +53,8 @@ const io = new Server(server, {
             "http://192.168.0.102:5173",
             "http://192.168.0.103:5173",
             "http://192.168.0.107:5173",
-            "http://localhost:5173"
+            "http://localhost:5173",
+            "https://chat-app-backend-5208.onrender.com"
         ],
         credentials: true
     }
