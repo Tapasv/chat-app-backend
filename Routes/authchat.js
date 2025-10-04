@@ -9,7 +9,7 @@ const User = require('../Schemas/User');
 // ✅ Multer setup
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, '../uploads')); // ensure correct path
+        cb(null, path.join(__dirname, '../uploads'));
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -19,8 +19,48 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage,
-    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+    limits: { fileSize: 100 * 1024 * 1024 },
     fileFilter: (req, file, cb) => cb(null, true),
+});
+
+// ✅ NEW ROUTE: Fetch chat history
+router.get('/private/:userId', Authmiddlewhere, async (req, res) => {
+    try {
+        const currentUserId = req.userID; // from middleware
+        const otherUserId = req.params.userId;
+
+        // Verify they are friends
+        const currentUser = await User.findById(currentUserId);
+        const otherUser = await User.findById(otherUserId);
+
+        if (!currentUser || !otherUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const areFriends = currentUser.friends.some(
+            friendId => friendId.toString() === otherUserId
+        );
+
+        if (!areFriends) {
+            return res.status(403).json({ message: 'You can only view messages with friends' });
+        }
+
+        // Fetch messages between the two users
+        const messages = await Message.find({
+            $or: [
+                { sender: currentUserId, receiver: otherUserId },
+                { sender: otherUserId, receiver: currentUserId }
+            ]
+        })
+        .populate('sender', 'Username profilePicture')
+        .populate('receiver', 'Username profilePicture')
+        .sort({ createdAt: 1 }); // oldest first
+
+        res.json(messages);
+    } catch (err) {
+        console.error('Error fetching messages:', err);
+        res.status(500).json({ message: 'Error fetching messages' });
+    }
 });
 
 // ✅ Upload file route
@@ -31,17 +71,16 @@ router.post('/upload', Authmiddlewhere, upload.single('file'), async (req, res) 
         const { receiver } = req.body;
         if (!receiver) return res.status(400).json({ message: 'Receiver is required' });
 
-        // Check if receiver is a friend
-        const sender = await User.findById(req.user._id);
+        const sender = await User.findById(req.userID);
         if (!sender.friends.includes(receiver)) {
             return res.status(403).json({ message: 'You can only send files to friends' });
         }
 
         const messageData = {
-            sender: req.user._id,
+            sender: req.userID,
             receiver,
             text: `📎 ${req.file.originalname}`,
-            fileUrl: `/uploads/${req.file.filename}`, // ✅ correct URL
+            fileUrl: `/uploads/${req.file.filename}`,
             fileName: req.file.originalname,
             fileSize: req.file.size,
             fileType: req.file.mimetype,
@@ -58,7 +97,7 @@ router.post('/upload', Authmiddlewhere, upload.single('file'), async (req, res) 
         const onlineUsers = req.app.get('onlineUsers');
 
         const receiverSocketId = onlineUsers.get(receiver.toString());
-        const senderSocketId = onlineUsers.get(req.user._id.toString());
+        const senderSocketId = onlineUsers.get(req.userID.toString());
         
         if (receiverSocketId) io.to(receiverSocketId).emit('receivePrivateMessage', populatedMessage);
         if (senderSocketId) io.to(senderSocketId).emit('receivePrivateMessage', populatedMessage);
@@ -70,4 +109,4 @@ router.post('/upload', Authmiddlewhere, upload.single('file'), async (req, res) 
     }
 });
 
-module.exports = router
+module.exports = router;
