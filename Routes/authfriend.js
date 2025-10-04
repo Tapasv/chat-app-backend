@@ -33,9 +33,14 @@ const uploadProfile = multer({
 });
 
 // Upload profile picture
+// Upload profile picture
 router.post("/profile-picture", Authmiddlewhere, uploadProfile.single('profilePicture'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    if (!req.userID) {
+      return res.status(401).json({ message: "Unauthorized: userID missing" });
+    }
 
     const profilePicturePath = `/uploads/profiles/${req.file.filename}`;
     
@@ -43,10 +48,11 @@ router.post("/profile-picture", Authmiddlewhere, uploadProfile.single('profilePi
 
     res.json({ message: 'Profile picture updated', profilePicture: profilePicturePath });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Profile picture upload error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+
 
 // Search users by username
 router.get("/search", Authmiddlewhere, async (req, res) => {

@@ -19,18 +19,12 @@ const { DBcnnctn } = require('./DBcnnctn');
 const port = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// ✅ Allowed frontend origins
-const allowedOrigins = [
-    "http://192.168.0.102:5173",
-    "http://192.168.0.103:5173",
-    "http://192.168.0.107:5173",
-    "http://localhost:5173",
-    "https://chat-app-frontend-nine-sage.vercel.app" // ✅ fixed (removed trailing slash)
-];
-
-// ✅ CORS middleware
+// ✅ CORS middleware (REST APIs)
 app.use(cors({
-    origin: allowedOrigins,
+    origin: [
+        "https://chat-app-frontend-nine-sage.vercel.app",
+        "http://localhost:5173"
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
@@ -47,13 +41,17 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 // ✅ Serve static uploads
 app.use("/uploads", express.static(uploadDir));
 
-// ✅ Socket.IO setup
+// ✅ Socket.IO setup (WebSocket + polling CORS fix)
 const io = new Server(server, {
     cors: {
-        origin: allowedOrigins,
+        origin: [
+            "https://chat-app-frontend-nine-sage.vercel.app",
+            "http://localhost:5173"
+        ],
         methods: ["GET", "POST"],
         credentials: true
-    }
+    },
+    transports: ["websocket", "polling"], // ✅ ensure fallback
 });
 
 const onlineUsers = new Map();
@@ -84,19 +82,21 @@ io.on("connection", (socket) => {
         }
     }
 
-    console.log(`User connected: ${Username} (${userID})`);
+    console.log(`✅ User connected: ${Username} (${userID})`);
     io.emit("onlineUsers", [...onlineUsers.keys()]);
 
+    // ✅ Let client request online users manually
     socket.on("requestOnlineUsers", () => {
         socket.emit("onlineUsers", [...onlineUsers.keys()]);
     });
 
     socket.on("disconnect", () => {
         if (userID) onlineUsers.delete(userID);
-        console.log(`User disconnected: ${Username}`);
+        console.log(`❌ User disconnected: ${Username}`);
         io.emit("onlineUsers", [...onlineUsers.keys()]);
     });
 
+    // ✅ Private Messaging
     socket.on("sendPrivateMessage", async (data) => {
         try {
             const sender = await User.findById(data.sender);
@@ -107,7 +107,11 @@ io.on("connection", (socket) => {
             const senderFriendsStr = sender.friends.map(id => id.toString());
             if (!senderFriendsStr.includes(data.receiver.toString())) return;
 
-            const newMsg = new Message({ sender: data.sender, receiver: data.receiver, text: data.text });
+            const newMsg = new Message({
+                sender: data.sender,
+                receiver: data.receiver,
+                text: data.text
+            });
             await newMsg.save();
 
             const populatedMsg = await Message.findById(newMsg._id)
@@ -118,9 +122,15 @@ io.on("connection", (socket) => {
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("receivePrivateMessage", populatedMsg);
             } else {
-                if (!pendingNotifications.has(data.receiver.toString())) pendingNotifications.set(data.receiver.toString(), []);
+                // store pending notifications
+                if (!pendingNotifications.has(data.receiver.toString()))
+                    pendingNotifications.set(data.receiver.toString(), []);
                 pendingNotifications.get(data.receiver.toString()).push({
-                    sender: { _id: sender._id, Username: sender.Username, profilePicture: sender.profilePicture },
+                    sender: {
+                        _id: sender._id,
+                        Username: sender.Username,
+                        profilePicture: sender.profilePicture
+                    },
                     message: data.text,
                     timestamp: new Date()
                 });
@@ -128,23 +138,34 @@ io.on("connection", (socket) => {
 
             socket.emit("receivePrivateMessage", populatedMsg);
         } catch (error) {
-            console.error("Error in sendPrivateMessage:", error);
+            console.error("❌ Error in sendPrivateMessage:", error);
         }
     });
 
+    // ✅ Typing events
     socket.on("TypingPrivate", ({ username, receiver }) => {
         const receiverSocketId = onlineUsers.get(receiver?.toString());
-        if (receiverSocketId) io.to(receiverSocketId).emit("UserTypingPrivate", { username, senderId: socket.handshake.auth.userid });
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("UserTypingPrivate", {
+                username,
+                senderId: socket.handshake.auth.userid
+            });
+        }
     });
 
     socket.on("StopTypingPrivate", ({ username, receiver }) => {
         const receiverSocketId = onlineUsers.get(receiver?.toString());
-        if (receiverSocketId) io.to(receiverSocketId).emit("UserStopTypingPrivate", { username, senderId: socket.handshake.auth.userid });
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("UserStopTypingPrivate", {
+                username,
+                senderId: socket.handshake.auth.userid
+            });
+        }
     });
 });
 
 // ✅ Start server
 mongoose.connection.once('open', () => {
-    console.log("Connected to Database!");
-    server.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port}`));
+    console.log("✅ Connected to Database!");
+    server.listen(port, '0.0.0.0', () => console.log(`🚀 Server running on port ${port}`));
 });
