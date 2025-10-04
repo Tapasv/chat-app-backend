@@ -16,85 +16,59 @@ const Message = require('./Schemas/Message');
 const User = require('./Schemas/User');
 const { DBcnnctn } = require('./DBcnnctn');
 
-const port = process.env.PORT || 5000; // use Render's port
+const port = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// Allowed frontend origins
+// ✅ Allowed frontend origins
 const allowedOrigins = [
     "http://192.168.0.102:5173",
     "http://192.168.0.103:5173",
     "http://192.168.0.107:5173",
     "http://localhost:5173",
-    "https://chat-app-frontend-qspf0il3i-tapasvs-projects.vercel.app/" // add new frontend
+    "https://chat-app-frontend-nine-sage.vercel.app" // ✅ fixed (removed trailing slash)
 ];
 
-// CORS middleware
-const corsOptions = {
-    origin: function(origin, callback) {
-        if (!origin) return callback(null, true); // allow curl, mobile, server requests
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(null, true); // allow unknown origins if needed, or use false to block
-        }
-    },
+// ✅ CORS middleware
+app.use(cors({
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
-};
-app.use(cors(corsOptions));
-
-// Handle preflight OPTIONS safely
-app.use((req, res, next) => {
-    if (req.method === 'OPTIONS') {
-        const origin = req.headers.origin;
-        if (allowedOrigins.includes(origin)) {
-            res.header('Access-Control-Allow-Origin', origin);
-            res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-            res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-            res.header('Access-Control-Allow-Credentials', 'true');
-            return res.sendStatus(204);
-        } else {
-            return res.sendStatus(403);
-        }
-    }
-    next();
-});
-
+}));
 app.use(express.json());
 
-// DB Connection
+// ✅ DB Connection
 DBcnnctn();
 
-// Create uploads directories if they don't exist
+// ✅ Ensure uploads directory exists
 const uploadDir = path.join(__dirname, 'uploads');
-const profilesDir = path.join(__dirname, 'uploads/profiles');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-if (!fs.existsSync(profilesDir)) fs.mkdirSync(profilesDir, { recursive: true });
 
-// Socket.IO Setup
+// ✅ Serve static uploads
+app.use("/uploads", express.static(uploadDir));
+
+// ✅ Socket.IO setup
 const io = new Server(server, {
     cors: {
         origin: allowedOrigins,
+        methods: ["GET", "POST"],
         credentials: true
     }
 });
 
-// Online users and pending notifications
 const onlineUsers = new Map();
 const pendingNotifications = new Map();
 
 app.set('socketio', io);
 app.set('onlineUsers', onlineUsers);
 
-// Routes
+// ✅ Routes
 app.use('/api/auth', authuser);
 app.use('/api/admin', authadmin);
 app.use('/api/chat', authchat);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use("/api/friends", friendRoutes);
 
-// Socket.IO events
+// ✅ Socket.IO Events
 io.on("connection", (socket) => {
     const Username = socket.handshake.auth.Username || "Anonymous";
     const userID = socket.handshake.auth.userid?.toString();
@@ -102,6 +76,7 @@ io.on("connection", (socket) => {
     if (userID) {
         onlineUsers.set(userID, socket.id);
 
+        // Deliver pending notifications
         if (pendingNotifications.has(userID)) {
             const notifications = pendingNotifications.get(userID);
             notifications.forEach(notif => socket.emit("newMessageNotification", notif));
@@ -126,13 +101,11 @@ io.on("connection", (socket) => {
         try {
             const sender = await User.findById(data.sender);
             const receiver = await User.findById(data.receiver);
+            if (!sender || !receiver) return;
 
-            if (!sender || !receiver) return socket.emit("errorMessage", { message: "User not found" });
-
+            // Ensure they’re friends
             const senderFriendsStr = sender.friends.map(id => id.toString());
-            if (!senderFriendsStr.includes(data.receiver.toString())) {
-                return socket.emit("errorMessage", { message: "You can only message friends" });
-            }
+            if (!senderFriendsStr.includes(data.receiver.toString())) return;
 
             const newMsg = new Message({ sender: data.sender, receiver: data.receiver, text: data.text });
             await newMsg.save();
@@ -145,24 +118,15 @@ io.on("connection", (socket) => {
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("receivePrivateMessage", populatedMsg);
             } else {
-                const notification = {
-                    sender: {
-                        _id: sender._id,
-                        Username: sender.Username,
-                        profilePicture: sender.profilePicture
-                    },
+                if (!pendingNotifications.has(data.receiver.toString())) pendingNotifications.set(data.receiver.toString(), []);
+                pendingNotifications.get(data.receiver.toString()).push({
+                    sender: { _id: sender._id, Username: sender.Username, profilePicture: sender.profilePicture },
                     message: data.text,
                     timestamp: new Date()
-                };
-                if (!pendingNotifications.has(data.receiver.toString())) pendingNotifications.set(data.receiver.toString(), []);
-                pendingNotifications.get(data.receiver.toString()).push(notification);
+                });
             }
 
             socket.emit("receivePrivateMessage", populatedMsg);
-
-            const senderSocketId = onlineUsers.get(data.sender.toString());
-            if (senderSocketId && senderSocketId !== socket.id) io.to(senderSocketId).emit("receivePrivateMessage", populatedMsg);
-
         } catch (error) {
             console.error("Error in sendPrivateMessage:", error);
         }
@@ -179,7 +143,7 @@ io.on("connection", (socket) => {
     });
 });
 
-// Start server
+// ✅ Start server
 mongoose.connection.once('open', () => {
     console.log("Connected to Database!");
     server.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port}`));
