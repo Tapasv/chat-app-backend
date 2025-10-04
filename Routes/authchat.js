@@ -69,3 +69,5 @@ router.post('/upload', Authmiddlewhere, upload.single('file'), async (req, res) 
         res.status(500).json({ message: 'Upload failed', error: err.message });
     }
 });
+
+module.exports = router
