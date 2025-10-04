@@ -20,11 +20,13 @@ const port = process.env.PORT || 5000;
 const server = http.createServer(app);
 
 // ✅ CORS middleware (REST APIs)
+// ✅ CORS middleware (REST APIs)
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+    ? ["https://chat-app-frontend-nine-sage.vercel.app"]
+    : ["http://localhost:5173"];
+
 app.use(cors({
-    origin: [
-        "https://chat-app-frontend-nine-sage.vercel.app",
-        "http://localhost:5173"
-    ],
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
@@ -44,14 +46,13 @@ app.use("/uploads", express.static(uploadDir));
 // ✅ Socket.IO setup (WebSocket + polling CORS fix)
 const io = new Server(server, {
     cors: {
-        origin: [
-            "https://chat-app-frontend-nine-sage.vercel.app",
-            "http://localhost:5173"
-        ],
+        origin: allowedOrigins,
         methods: ["GET", "POST"],
         credentials: true
     },
-    transports: ["websocket", "polling"], // ✅ ensure fallback
+    transports: ["websocket", "polling"],
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
 const onlineUsers = new Map();
