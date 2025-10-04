@@ -19,11 +19,11 @@ const { DBcnnctn } = require('./DBcnnctn');
 const port = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// ✅ CORS middleware (REST APIs)
-// ✅ CORS middleware (REST APIs)
-const allowedOrigins = process.env.NODE_ENV === 'production' 
-    ? ["https://chat-app-frontend-nine-sage.vercel.app"]
-    : ["http://localhost:5173"];
+// ✅ CORS configuration
+const allowedOrigins = [
+    "https://chat-app-frontend-nine-sage.vercel.app",
+    "http://localhost:5173"
+];
 
 app.use(cors({
     origin: allowedOrigins,
@@ -31,6 +31,7 @@ app.use(cors({
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
 }));
+
 app.use(express.json());
 
 // ✅ DB Connection
@@ -48,9 +49,11 @@ const io = new Server(server, {
     cors: {
         origin: allowedOrigins,
         methods: ["GET", "POST"],
-        credentials: true
+        credentials: true,
+        allowedHeaders: ["*"]
     },
     transports: ["websocket", "polling"],
+    allowEIO3: true,
     pingTimeout: 60000,
     pingInterval: 25000
 });
