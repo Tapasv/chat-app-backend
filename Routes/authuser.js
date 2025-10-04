@@ -9,14 +9,27 @@ router.post('/register', async (req, res) => {
     try {
         const { Username, Password, Email, role } = req.body;
 
-        const dupli = await User.findOne({ Username });
-        if (dupli) {
-            return res.status(403).json({ 'message': `User: ${Username} already exists` });
+        // Email format validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(Email)) {
+            return res.status(400).json({ message: 'Invalid email format' });
         }
 
-        const dupliemail = await User.findOne({ Email})
+        // Domain validation - only allow specific email providers
+        const allowedDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com'];
+        const emailDomain = Email.toLowerCase().split('@')[1];
+        if (!allowedDomains.includes(emailDomain)) {
+            return res.status(400).json({ message: 'Please use Gmail, Yahoo, or Outlook email' });
+        }
+
+        const dupli = await User.findOne({ Username });
+        if (dupli) {
+            return res.status(403).json({ message: `User: ${Username} already exists` });
+        }
+
+        const dupliemail = await User.findOne({ Email })
         if(dupliemail) {
-            return res.status(403).json({'message': 'Email already exists'})
+            return res.status(403).json({ message: 'Email already exists' })
         }
 
         const hashedpwd = await bcrypt.hash(Password, 10);
@@ -29,13 +42,13 @@ router.post('/register', async (req, res) => {
         });
         
         const savedUser = await newUser.save();
-        console.log("User saved to DB:", savedUser._id); // Debug log
+        console.log("User saved to DB:", savedUser._id);
 
-        res.status(201).json({ 'message': `User: ${Username} created successfully` });
+        res.status(201).json({ message: `User: ${Username} created successfully` });
     }
     catch (err) {
-        console.error("Registration error:", err); // This will show the real error
-        res.status(500).json({ 'message': 'Server error', error: err.message });
+        console.error("Registration error:", err);
+        res.status(500).json({ message: 'Server error', error: err.message });
     }
 });
 
@@ -45,12 +58,12 @@ router.post('/login', async (req, res) => {
 
         const user = await User.findOne({ Username });
         if (!user) {
-            return res.status(403).json({ 'message': `User: ${Username} not found` });
+            return res.status(403).json({ message: `User: ${Username} not found` });
         }
 
         const ismatch = await bcrypt.compare(Password, user.Password);
         if (!ismatch) {
-            return res.status(403).json({ 'message': `Invalid Credentials` });
+            return res.status(403).json({ message: `Invalid Credentials` });
         }
 
         const Accesstoken = jwt.sign(
@@ -68,7 +81,7 @@ router.post('/login', async (req, res) => {
         await user.save();
 
         res.status(201).json({
-            'message': `User ${Username} logged In`,
+            message: `User ${Username} logged In`,
             refreshToken: Refreshtoken,
             token: Accesstoken,
             user: {
@@ -81,11 +94,10 @@ router.post('/login', async (req, res) => {
     }
     catch (err) {
         console.error(err);
-        res.status(500).json({ 'message': 'Server error' });
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
-// ✅ NEW: Token validation endpoint (fixes 404 error)
 router.get('/validate', Authmiddlewhere, async (req, res) => {
     try {
         const user = await User.findById(req.userID).select('_id Username role profilePicture');
@@ -115,12 +127,12 @@ router.post('/refresh', async (req, res) => {
 
         const user = await User.findOne({ refreshToken });
         if (!user) {
-            return res.status(403).json({ 'message': `Invalid Token` });
+            return res.status(403).json({ message: `Invalid Token` });
         }
 
         jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, decoded) => {
             if(err) {
-                return res.status(403).json({ 'message': 'Invalid refresh token' });
+                return res.status(403).json({ message: 'Invalid refresh token' });
             }
 
             const Accesstoken = jwt.sign(
@@ -134,7 +146,7 @@ router.post('/refresh', async (req, res) => {
     }
     catch (err) {
         console.error(err);
-        res.status(500).json({ 'message': 'Server error' });
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
@@ -144,17 +156,17 @@ router.post('/logout', async (req, res) => {
 
         const user = await User.findOne({ refreshToken });
         if (!user) {
-            return res.status(403).json({ 'message': `User already logged out OR Invalid Token` });
+            return res.status(403).json({ message: `User already logged out OR Invalid Token` });
         }
 
        user.refreshToken = null;
        await user.save();
 
-       return res.status(201).json({ 'message': `User: ${user.Username} successfully logged out ` });
+       return res.status(201).json({ message: `User: ${user.Username} successfully logged out ` });
     }
     catch (err) {
         console.error(err);
-        res.status(500).json({ 'message': 'Server error' });
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
