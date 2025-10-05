@@ -2,30 +2,23 @@ const nodemailer = require('nodemailer')
 
 const sendEmail = async (to, subject, html) => {
     try {
-        console.log('📧 Creating email transporter...');
+        console.log('📧 Creating Brevo email transporter...');
         console.log('📧 EMAIL_USER:', process.env.EMAIL_USER);
-        console.log('📧 EMAIL_PASS exists:', !!process.env.EMAIL_PASS);
+        console.log('📧 BREVO_SMTP_KEY exists:', !!process.env.BREVO_SMTP_KEY);
         
         const transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
+            host: 'smtp-relay.brevo.com',
             port: 587,
-            secure: false, // use TLS
+            secure: false,
             auth: {
                 user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
-            },
-            tls: {
-                rejectUnauthorized: false
-            },
-            // Add these for better connection handling on Render
-            connectionTimeout: 10000, // 10 seconds
-            greetingTimeout: 10000,
-            socketTimeout: 10000
+                pass: process.env.BREVO_SMTP_KEY
+            }
         });
 
-        console.log('✅ Verifying transporter connection...');
+        console.log('✅ Verifying Brevo connection...');
         await transporter.verify();
-        console.log('✅ Transporter verified successfully!');
+        console.log('✅ Brevo connection verified!');
 
         const mailOptions = {
             from: `"Chatify Support" <${process.env.EMAIL_USER}>`,
@@ -34,7 +27,7 @@ const sendEmail = async (to, subject, html) => {
             html
         };
 
-        console.log('📤 Sending email to:', to);
+        console.log('📤 Sending email via Brevo to:', to);
         const info = await transporter.sendMail(mailOptions);
         console.log('✅ Email sent successfully!');
         console.log('📊 Message ID:', info.messageId);
@@ -42,7 +35,7 @@ const sendEmail = async (to, subject, html) => {
         return info;
         
     } catch (error) {
-        console.error('❌ SendEmail Error:', error.message);
+        console.error('❌ Brevo Email Error:', error.message);
         console.error('❌ Error code:', error.code);
         
         if (error.response) {
