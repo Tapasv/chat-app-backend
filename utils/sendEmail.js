@@ -1,58 +1,47 @@
-const nodemailer = require('nodemailer')
+const brevo = require('@getbrevo/brevo');
 
 const sendEmail = async (to, subject, html) => {
     try {
-        console.log('📧 Creating Brevo email transporter...');
-        console.log('📧 EMAIL_USER:', process.env.EMAIL_USER);
-        console.log('📧 BREVO_SMTP_KEY exists:', !!process.env.BREVO_SMTP_KEY);
-        console.log('📧 BREVO_SMTP_KEY length:', process.env.BREVO_SMTP_KEY?.length);
-        
-        const transporter = nodemailer.createTransport({
-            host: 'smtp-relay.brevo.com',
-            port: 587,
-            secure: false,
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.BREVO_SMTP_KEY
-            },
-            // Add timeouts
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 15000
-        });
+        console.log('📧 Initializing Brevo API...');
+        console.log('📧 Sending to:', to);
+        console.log('📧 From:', process.env.EMAIL_USER);
+        console.log('📧 API Key exists:', !!process.env.BREVO_API_KEY);
 
-        console.log('✅ Attempting to verify Brevo connection...');
+        // Initialize API client
+        const apiInstance = new brevo.TransactionalEmailsApi();
         
-        // Skip verification and try sending directly
-        // await transporter.verify();
-        // console.log('✅ Brevo connection verified!');
+        // Set API key
+        apiInstance.setApiKey(
+            brevo.TransactionalEmailsApiApiKeys.apiKey,
+            process.env.BREVO_API_KEY
+        );
 
-        const mailOptions = {
-            from: `"Chatify Support" <${process.env.EMAIL_USER}>`,
-            to,
-            subject,
-            html
+        // Prepare email data
+        const sendSmtpEmail = new brevo.SendSmtpEmail();
+        
+        sendSmtpEmail.subject = subject;
+        sendSmtpEmail.htmlContent = html;
+        sendSmtpEmail.sender = { 
+            name: "Chatify Support", 
+            email: process.env.EMAIL_USER 
         };
+        sendSmtpEmail.to = [{ email: to }];
 
-        console.log('📤 Sending email via Brevo to:', to);
-        const info = await transporter.sendMail(mailOptions);
-        console.log('✅ Email sent successfully!');
-        console.log('📊 Message ID:', info.messageId);
-        console.log('📊 Response:', info.response);
+        console.log('📤 Sending email via Brevo API...');
         
-        return info;
+        // Send email
+        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        
+        console.log('✅ Email sent successfully!');
+        console.log('📊 Message ID:', data.messageId);
+        
+        return data;
         
     } catch (error) {
-        console.error('❌ Brevo Email Error:', error.message);
-        console.error('❌ Error code:', error.code);
-        console.error('❌ Full error:', error);
-        
-        if (error.response) {
-            console.error('❌ SMTP Response:', error.response);
-        }
-        
+        console.error('❌ Brevo API Error:', error.message);
+        console.error('❌ Error body:', error.body);
         throw error;
     }
 }
 
-module.exports = sendEmail
+module.exports = sendEmail;
