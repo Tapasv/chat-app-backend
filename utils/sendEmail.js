@@ -5,6 +5,7 @@ const sendEmail = async (to, subject, html) => {
         console.log('📧 Creating Brevo email transporter...');
         console.log('📧 EMAIL_USER:', process.env.EMAIL_USER);
         console.log('📧 BREVO_SMTP_KEY exists:', !!process.env.BREVO_SMTP_KEY);
+        console.log('📧 BREVO_SMTP_KEY length:', process.env.BREVO_SMTP_KEY?.length);
         
         const transporter = nodemailer.createTransport({
             host: 'smtp-relay.brevo.com',
@@ -13,12 +14,18 @@ const sendEmail = async (to, subject, html) => {
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.BREVO_SMTP_KEY
-            }
+            },
+            // Add timeouts
+            connectionTimeout: 15000,
+            greetingTimeout: 15000,
+            socketTimeout: 15000
         });
 
-        console.log('✅ Verifying Brevo connection...');
-        await transporter.verify();
-        console.log('✅ Brevo connection verified!');
+        console.log('✅ Attempting to verify Brevo connection...');
+        
+        // Skip verification and try sending directly
+        // await transporter.verify();
+        // console.log('✅ Brevo connection verified!');
 
         const mailOptions = {
             from: `"Chatify Support" <${process.env.EMAIL_USER}>`,
@@ -31,12 +38,14 @@ const sendEmail = async (to, subject, html) => {
         const info = await transporter.sendMail(mailOptions);
         console.log('✅ Email sent successfully!');
         console.log('📊 Message ID:', info.messageId);
+        console.log('📊 Response:', info.response);
         
         return info;
         
     } catch (error) {
         console.error('❌ Brevo Email Error:', error.message);
         console.error('❌ Error code:', error.code);
+        console.error('❌ Full error:', error);
         
         if (error.response) {
             console.error('❌ SMTP Response:', error.response);
