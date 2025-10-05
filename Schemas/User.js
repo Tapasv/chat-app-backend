@@ -8,7 +8,9 @@ const UserSchema = new mongoose.Schema(
         Email: { type: String, required: true, unique: true },
         refreshToken: { type: String },
         friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-        profilePicture: { type: String, default: null } // NEW
+        profilePicture: { type: String, default: null }, // NEW
+        resetPasswordToken: {type: String},
+        resetPasswordExpires: {type: Date}
     }
 )
 

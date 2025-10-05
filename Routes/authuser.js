@@ -3,7 +3,9 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../Schemas/User');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto')
 const { Authmiddlewhere } = require('../middlewhere/Authmiddlewhere');
+const sendEmail = require('../utils/sendEmail')
 
 router.post('/register', async (req, res) => {
     try {
@@ -169,5 +171,64 @@ router.post('/logout', async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+
+router.post('/forgot-password', async (req, res) => {
+    try{
+        const { email } = req.body
+
+        const user = await User.findOne({ Email: email})
+
+        if(!user) {
+            return res.status(404).json({'message': 'No user with that emial found'})
+        }
+
+        const resetToken = crypto.randomBytes(64).toString('hex')
+        user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex')
+        user.resetPasswordExpires = Date.now() + 3600000; 
+        await user.save()
+
+        const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`
+
+        const html = `
+            <h2>Password Reset Request</h2>
+            <p>You requested a password reset for your Chatify account.</p>
+            <p>Click the link below to reset your password:</p>
+            <a href="${resetUrl}" style="display: inline-block; padding: 10px 20px; background: #e50914; color: white; text-decoration: none; border-radius: 5px;">Reset Password</a>
+            <p>This link expires in 1 hour.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+        `;
+
+        await sendEmail(user.Email, 'Password reset request', html)
+
+        res.json({message: 'Password reset link sent to your email.'})
+    } catch(err) {
+        console.error(err)
+    }
+})
+
+router.post('/reset-password/:token', async (req, res) => {
+    try{
+        const {token} = req.params
+        const { Password } = req.body
+
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex')
+
+        const user = await User.findOne({
+            resetPasswordToken: hashedToken,
+            resetPasswordExpires: { $gt: Date.now()}
+        })
+
+        if(!user) {
+             return res.status(400).json({ message: 'Invalid or expired link' });
+        }
+
+        user.Password = await bcrypt.hash(Password, 10)
+        user.resetPasswordExpires = undefined
+        user.resetPasswordToken = undefined
+        await user.save()
+    } catch(err) {
+        console.error(err)
+    }
+})
 
 module.exports = router;
