@@ -6,7 +6,7 @@ const { Authmiddlewhere } = require('../middlewhere/Authmiddlewhere');
 const Message = require('../Schemas/Message');
 const User = require('../Schemas/User');
 
-// ✅ Multer setup
+// Multer setup
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, path.join(__dirname, '../uploads'));
@@ -23,13 +23,11 @@ const upload = multer({
     fileFilter: (req, file, cb) => cb(null, true),
 });
 
-// ✅ NEW ROUTE: Fetch chat history
 router.get('/private/:userId', Authmiddlewhere, async (req, res) => {
     try {
-        const currentUserId = req.userID; // from middleware
+        const currentUserId = req.userID;
         const otherUserId = req.params.userId;
 
-        // Verify they are friends
         const currentUser = await User.findById(currentUserId);
         const otherUser = await User.findById(otherUserId);
 
@@ -45,7 +43,6 @@ router.get('/private/:userId', Authmiddlewhere, async (req, res) => {
             return res.status(403).json({ message: 'You can only view messages with friends' });
         }
 
-        // Fetch messages between the two users
         const messages = await Message.find({
             $or: [
                 { sender: currentUserId, receiver: otherUserId },
@@ -54,16 +51,22 @@ router.get('/private/:userId', Authmiddlewhere, async (req, res) => {
         })
         .populate('sender', 'Username profilePicture')
         .populate('receiver', 'Username profilePicture')
-        .sort({ createdAt: 1 }); // oldest first
+        .sort({ createdAt: 1 });
 
-        res.json(messages);
+        const filteredMessages = messages.filter(msg => {
+            if (msg.deletedFor && msg.deletedFor.some(id => id.toString() === currentUserId)) {
+                return false;
+            }
+            return true;
+        });
+
+        res.json(filteredMessages);
     } catch (err) {
         console.error('Error fetching messages:', err);
         res.status(500).json({ message: 'Error fetching messages' });
     }
 });
 
-// ✅ Upload file route
 router.post('/upload', Authmiddlewhere, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
@@ -106,6 +109,113 @@ router.post('/upload', Authmiddlewhere, upload.single('file'), async (req, res) 
     } catch (err) {
         console.error('Upload error:', err);
         res.status(500).json({ message: 'Upload failed', error: err.message });
+    }
+});
+
+router.put('/edit/:messageId', Authmiddlewhere, async (req, res) => {
+    try {
+        const { messageId } = req.params;
+        const { content, text } = req.body;
+        const userId = req.userID;
+
+        const message = await Message.findById(messageId);
+
+        if (!message) {
+            return res.status(404).json({ message: 'Message not found' });
+        }
+
+        if (message.sender.toString() !== userId) {
+            return res.status(403).json({ message: 'You can only edit your own messages' });
+        }
+
+        if (message.deletedForEveryone) {
+            return res.status(400).json({ message: 'Cannot edit deleted message' });
+        }
+
+        const fifteenMinutes = 15 * 60 * 1000;
+        const messageAge = Date.now() - new Date(message.createdAt).getTime();
+
+        if (messageAge > fifteenMinutes) {
+            return res.status(400).json({ message: 'Edit time limit (15 minutes) has expired' });
+        }
+
+        message.text = content || text;
+        message.isEdited = true;
+        message.editedAt = new Date();
+        await message.save();
+
+        const populatedMessage = await Message.findById(message._id)
+            .populate('sender', 'Username profilePicture')
+            .populate('receiver', 'Username profilePicture');
+
+        res.status(200).json({ 
+            message: 'Message edited successfully',
+            data: populatedMessage
+        });
+
+    } catch (err) {
+        console.error('Edit message error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
+    try {
+        const { messageId } = req.params;
+        const { deleteType } = req.body;
+        const userId = req.userID;
+
+        const message = await Message.findById(messageId);
+
+        if (!message) {
+            return res.status(404).json({ message: 'Message not found' });
+        }
+
+        if (deleteType === 'forEveryone') {
+            if (message.sender.toString() !== userId) {
+                return res.status(403).json({ message: 'Only sender can delete for everyone' });
+            }
+
+            const fifteenMinutes = 15 * 60 * 1000;
+            const messageAge = Date.now() - new Date(message.createdAt).getTime();
+
+            if (messageAge > fifteenMinutes) {
+                return res.status(400).json({ 
+                    message: 'Delete for everyone is only available within 15 minutes' 
+                });
+            }
+
+            message.deletedForEveryone = true;
+            message.text = 'This message was deleted';
+            await message.save();
+
+            const populatedMessage = await Message.findById(message._id)
+                .populate('sender', 'Username profilePicture')
+                .populate('receiver', 'Username profilePicture');
+
+            res.status(200).json({ 
+                message: 'Message deleted for everyone',
+                data: populatedMessage
+            });
+
+        } else if (deleteType === 'forMe') {
+            if (!message.deletedFor.includes(userId)) {
+                message.deletedFor.push(userId);
+                await message.save();
+            }
+
+            res.status(200).json({ 
+                message: 'Message deleted for you',
+                data: message
+            });
+
+        } else {
+            return res.status(400).json({ message: 'Invalid delete type' });
+        }
+
+    } catch (err) {
+        console.error('Delete message error:', err);
+        res.status(500).json({ message: 'Server error' });
     }
 });
 

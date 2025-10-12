@@ -1,19 +1,40 @@
 const mongoose = require('mongoose');
-const User = require('./User');
-const Group = require('./Group'); // New schema for group messages
 
-const MessageSchema = new mongoose.Schema(
-  {
-    sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    receiver: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // For private chat
-    group: { type: mongoose.Schema.Types.ObjectId, ref: 'Group' }, // For group chat
-    text: { type: String },
-    fileUrl: { type: String },
-    fileName: { type: String },
-    fileSize: { type: String },
-    fileType: { type: String },
-  },
-  { timestamps: true }
-);
+const messageSchema = new mongoose.Schema({
+    sender: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    receiver: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    text: String, // Your main message field
+    
+    // File fields
+    fileUrl: String,
+    fileName: String,
+    fileSize: Number,
+    fileType: String,
+    
+    // Edit/Delete fields
+    isEdited: {
+        type: Boolean,
+        default: false
+    },
+    editedAt: Date,
+    deletedFor: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
+    deletedForEveryone: {
+        type: Boolean,
+        default: false
+    }
+}, { 
+    timestamps: true 
+});
 
-module.exports = mongoose.model('Message', MessageSchema);
+module.exports = mongoose.model('Message', messageSchema);
