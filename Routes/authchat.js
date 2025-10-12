@@ -6,6 +6,9 @@ const { Authmiddlewhere } = require('../middlewhere/Authmiddlewhere');
 const Message = require('../Schemas/Message');
 const User = require('../Schemas/User');
 
+// ADD THIS LOG
+console.log('📁 Chat routes file loaded!');
+
 // Multer setup
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -218,5 +221,7 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+
+console.log('✅ DELETE route registered!');
 
 module.exports = router;
