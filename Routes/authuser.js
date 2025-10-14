@@ -185,6 +185,7 @@ router.post('/forgot-password', async (req, res) => {
         const resetToken = crypto.randomBytes(64).toString('hex')
         user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex')
         user.resetPasswordExpires = Date.now() + 3600000; 
+        // now here sha256 means secure hash algorithm 256bit which take input like file or text and then produce a fixed size output always 256bit = 32bytes = 64hex character and then output is called hash or digest
         await user.save()
 
         const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`
