@@ -338,7 +338,7 @@ router.post('/block/:userId', Authmiddlewhere, async (req, res) => {
     }
 });
 
-// Unblock user (bonus feature)
+// Unblock user 
 router.delete('/unblock/:userId', Authmiddlewhere, async (req, res) => {
     try {
         const currentUserId = req.userID;
@@ -366,6 +366,25 @@ router.delete('/unblock/:userId', Authmiddlewhere, async (req, res) => {
     } catch (err) {
         console.error('Unblock user error:', err);
         res.status(500).json({ message: 'Error unblocking user' });
+    }
+});
+
+// Get blocked users list
+router.get('/blocked-users', Authmiddlewhere, async (req, res) => {
+    try {
+        const currentUserId = req.userID;
+        const currentUser = await User.findById(currentUserId);
+
+        if (!currentUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Return array of blocked user IDs
+        res.status(200).json(currentUser.blockedUsers || []);
+
+    } catch (err) {
+        console.error('Get blocked users error:', err);
+        res.status(500).json({ message: 'Error fetching blocked users' });
     }
 });
 
