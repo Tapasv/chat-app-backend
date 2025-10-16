@@ -272,6 +272,7 @@ router.delete('/clear/:userId', Authmiddlewhere, async (req, res) => {
 });
 
 // Block user
+// Update the Block user route in your backend
 router.post('/block/:userId', Authmiddlewhere, async (req, res) => {
     try {
         const currentUserId = req.userID;
@@ -301,29 +302,7 @@ router.post('/block/:userId', Authmiddlewhere, async (req, res) => {
         // Add to blocked list
         currentUser.blockedUsers.push(userToBlockId);
 
-        // Remove from friends list if they are friends
-        currentUser.friends = currentUser.friends.filter(
-            friendId => friendId.toString() !== userToBlockId
-        );
-
-        userToBlock.friends = userToBlock.friends.filter(
-            friendId => friendId.toString() !== currentUserId
-        );
-
         await currentUser.save();
-        await userToBlock.save();
-
-        // Emit socket event to notify the other user
-        const io = req.app.get('socketio');
-        const onlineUsers = req.app.get('onlineUsers');
-        const blockedUserSocketId = onlineUsers.get(userToBlockId);
-        
-        if (blockedUserSocketId) {
-            io.to(blockedUserSocketId).emit('friendRemoved', { 
-                userId: currentUserId 
-            });
-        }
-
         res.status(200).json({ 
             message: 'User blocked successfully',
             blockedUser: {
