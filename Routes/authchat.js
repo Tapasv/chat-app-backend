@@ -222,6 +222,151 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
     }
 });
 
-console.log('✅ DELETE route registered!');
+// Clear chat history
+router.delete('/clear/:userId', Authmiddlewhere, async (req, res) => {
+    try {
+        const currentUserId = req.userID;
+        const otherUserId = req.params.userId;
+
+        const currentUser = await User.findById(currentUserId);
+        const otherUser = await User.findById(otherUserId);
+
+        if (!currentUser || !otherUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Check if they are friends
+        const areFriends = currentUser.friends.some(
+            friendId => friendId.toString() === otherUserId
+        );
+
+        if (!areFriends) {
+            return res.status(403).json({ message: 'You can only clear chats with friends' });
+        }
+
+        // Find all messages between these two users
+        const messages = await Message.find({
+            $or: [
+                { sender: currentUserId, receiver: otherUserId },
+                { sender: otherUserId, receiver: currentUserId }
+            ]
+        });
+
+        // Add currentUserId to deletedFor array for each message
+        for (let message of messages) {
+            if (!message.deletedFor.includes(currentUserId)) {
+                message.deletedFor.push(currentUserId);
+                await message.save();
+            }
+        }
+
+        res.status(200).json({ 
+            message: 'Chat cleared successfully',
+            clearedCount: messages.length
+        });
+
+    } catch (err) {
+        console.error('Clear chat error:', err);
+        res.status(500).json({ message: 'Error clearing chat' });
+    }
+});
+
+// Block user
+router.post('/block/:userId', Authmiddlewhere, async (req, res) => {
+    try {
+        const currentUserId = req.userID;
+        const userToBlockId = req.params.userId;
+
+        if (currentUserId === userToBlockId) {
+            return res.status(400).json({ message: 'You cannot block yourself' });
+        }
+
+        const currentUser = await User.findById(currentUserId);
+        const userToBlock = await User.findById(userToBlockId);
+
+        if (!currentUser || !userToBlock) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Initialize blockedUsers array if it doesn't exist
+        if (!currentUser.blockedUsers) {
+            currentUser.blockedUsers = [];
+        }
+
+        // Check if already blocked
+        if (currentUser.blockedUsers.includes(userToBlockId)) {
+            return res.status(400).json({ message: 'User is already blocked' });
+        }
+
+        // Add to blocked list
+        currentUser.blockedUsers.push(userToBlockId);
+
+        // Remove from friends list if they are friends
+        currentUser.friends = currentUser.friends.filter(
+            friendId => friendId.toString() !== userToBlockId
+        );
+
+        userToBlock.friends = userToBlock.friends.filter(
+            friendId => friendId.toString() !== currentUserId
+        );
+
+        await currentUser.save();
+        await userToBlock.save();
+
+        // Emit socket event to notify the other user
+        const io = req.app.get('socketio');
+        const onlineUsers = req.app.get('onlineUsers');
+        const blockedUserSocketId = onlineUsers.get(userToBlockId);
+        
+        if (blockedUserSocketId) {
+            io.to(blockedUserSocketId).emit('friendRemoved', { 
+                userId: currentUserId 
+            });
+        }
+
+        res.status(200).json({ 
+            message: 'User blocked successfully',
+            blockedUser: {
+                _id: userToBlock._id,
+                Username: userToBlock.Username
+            }
+        });
+
+    } catch (err) {
+        console.error('Block user error:', err);
+        res.status(500).json({ message: 'Error blocking user' });
+    }
+});
+
+// Unblock user (bonus feature)
+router.delete('/unblock/:userId', Authmiddlewhere, async (req, res) => {
+    try {
+        const currentUserId = req.userID;
+        const userToUnblockId = req.params.userId;
+
+        const currentUser = await User.findById(currentUserId);
+
+        if (!currentUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (!currentUser.blockedUsers || !currentUser.blockedUsers.includes(userToUnblockId)) {
+            return res.status(400).json({ message: 'User is not blocked' });
+        }
+
+        // Remove from blocked list
+        currentUser.blockedUsers = currentUser.blockedUsers.filter(
+            blockedId => blockedId.toString() !== userToUnblockId
+        );
+
+        await currentUser.save();
+
+        res.status(200).json({ message: 'User unblocked successfully' });
+
+    } catch (err) {
+        console.error('Unblock user error:', err);
+        res.status(500).json({ message: 'Error unblocking user' });
+    }
+});
 
 module.exports = router;
