@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { Authmiddlewhere } = require('../middlewhere/Authmiddlewhere');
 const sendEmail = require('../utils/sendEmail');
+const { cloudinary, upload } = require('../config/cloudinary');
 
 // Get current user profile
 router.get('/me', Authmiddlewhere, async (req, res) => {
@@ -191,6 +192,44 @@ router.post('/verify-email/:token', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Failed to verify email' });
+    }
+});
+
+router.post('/upload-profile-picture', Authmiddlewhere, upload.single('profilePicture'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+
+        const user = await User.findById(req.userID);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Delete old profile picture from Cloudinary if exists
+        if (user.profilePicture) {
+            const urlParts = user.profilePicture.split('/');
+            const publicIdWithExtension = urlParts[urlParts.length - 1];
+            const publicId = `chatify-profiles/${publicIdWithExtension.split('.')[0]}`;
+            
+            try {
+                await cloudinary.uploader.destroy(publicId);
+            } catch (err) {
+                console.log('Error deleting old image:', err);
+            }
+        }
+
+        // Save new Cloudinary URL
+        user.profilePicture = req.file.path;
+        await user.save();
+
+        res.status(200).json({ 
+            message: 'Profile picture updated successfully',
+            profilePicture: user.profilePicture 
+        });
+    } catch (err) {
+        console.error('Profile picture upload error:', err);
+        res.status(500).json({ message: 'Failed to upload profile picture' });
     }
 });
 
