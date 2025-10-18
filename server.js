@@ -14,6 +14,7 @@ const authchat = require('./Routes/authchat');
 const friendRoutes = require("./Routes/authfriend");
 const Message = require('./Schemas/Message');
 const User = require('./Schemas/User');
+const profile = require('./Routes/profile')
 const { DBcnnctn } = require('./DBcnnctn');
 
 const port = process.env.PORT || 5000;
@@ -69,6 +70,7 @@ app.use('/api/auth', authuser);
 app.use('/api/admin', authadmin);
 app.use('/api/chat', authchat);
 app.use("/api/friends", friendRoutes);
+app.use('/profile', profile);
 
 // ✅ Socket.IO Events
 io.on("connection", (socket) => {

@@ -15,7 +15,10 @@ const UserSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
             default: []
-        }]
+        }],
+        emailChangeToken: { type: String },
+        newEmail: { type: String },
+        emailChangeExpires: { type: Date }
     }
 )
 
