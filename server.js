@@ -70,7 +70,7 @@ app.use('/api/auth', authuser);
 app.use('/api/admin', authadmin);
 app.use('/api/chat', authchat);
 app.use("/api/friends", friendRoutes);
-app.use('/profile', profile);
+app.use('/api/profile', profile);
 
 // ✅ Socket.IO Events
 io.on("connection", (socket) => {
