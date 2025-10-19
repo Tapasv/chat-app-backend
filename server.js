@@ -128,25 +128,25 @@ io.on("connection", (socket) => {
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("receivePrivateMessage", populatedMsg);
 
-                // Also send notification
+                // Also send notification to online users
                 io.to(receiverSocketId).emit("newMessageNotification", {
                     sender: {
                         _id: sender._id,
                         Username: sender.Username,
-                        profilePicture: sender.profilePicture || null
+                        profilePicture: sender.profilePicture
                     },
                     message: data.text,
                     timestamp: new Date()
                 });
             } else {
-                // store pending notifications (existing code)
+                // store pending notifications
                 if (!pendingNotifications.has(data.receiver.toString()))
                     pendingNotifications.set(data.receiver.toString(), []);
                 pendingNotifications.get(data.receiver.toString()).push({
                     sender: {
                         _id: sender._id,
                         Username: sender.Username,
-                        profilePicture: sender.profilePicture || null
+                        profilePicture: sender.profilePicture
                     },
                     message: data.text,
                     timestamp: new Date()
