@@ -51,9 +51,9 @@ router.get('/private/:userId', Authmiddlewhere, async (req, res) => {
                 { sender: otherUserId, receiver: currentUserId }
             ]
         })
-        .populate('sender', 'Username profilePicture')
-        .populate('receiver', 'Username profilePicture')
-        .sort({ createdAt: 1 });
+            .populate('sender', 'Username profilePicture')
+            .populate('receiver', 'Username profilePicture')
+            .sort({ createdAt: 1 });
 
         const filteredMessages = messages.filter(msg => {
             if (msg.deletedFor && msg.deletedFor.some(id => id.toString() === currentUserId)) {
@@ -103,7 +103,7 @@ router.post('/upload', Authmiddlewhere, upload.single('file'), async (req, res) 
 
         const receiverSocketId = onlineUsers.get(receiver.toString());
         const senderSocketId = onlineUsers.get(req.userID.toString());
-        
+
         if (receiverSocketId) io.to(receiverSocketId).emit('receivePrivateMessage', populatedMessage);
         if (senderSocketId) io.to(senderSocketId).emit('receivePrivateMessage', populatedMessage);
 
@@ -150,20 +150,26 @@ router.put('/edit/:messageId', Authmiddlewhere, async (req, res) => {
             .populate('sender', 'Username profilePicture')
             .populate('receiver', 'Username profilePicture');
 
-        // ✅ Emit real-time edit event to receiver
+        // ✅ Emit real-time edit event to the OTHER user
         const io = req.app.get('socketio');
         const onlineUsers = req.app.get('onlineUsers');
-        const receiverSocketId = onlineUsers.get(message.receiver.toString());
-        
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit('messageEdited', {
+
+        // Determine who to notify (the person who DIDN'T send the edit request)
+        const otherUserId = message.sender.toString() === userId
+            ? message.receiver.toString()
+            : message.sender.toString();
+
+        const otherUserSocketId = onlineUsers.get(otherUserId);
+
+        if (otherUserSocketId) {
+            io.to(otherUserSocketId).emit('messageEdited', {
                 messageId: message._id,
                 text: message.text,
                 isEdited: true
             });
         }
 
-        res.status(200).json({ 
+        res.status(200).json({
             message: 'Message edited successfully',
             data: populatedMessage
         });
@@ -195,8 +201,8 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
             const messageAge = Date.now() - new Date(message.createdAt).getTime();
 
             if (messageAge > twoDays) {
-                return res.status(400).json({ 
-                    message: 'Delete for everyone is only available within 2 days' 
+                return res.status(400).json({
+                    message: 'Delete for everyone is only available within 2 days'
                 });
             }
 
@@ -212,7 +218,7 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
             const io = req.app.get('socketio');
             const onlineUsers = req.app.get('onlineUsers');
             const receiverSocketId = onlineUsers.get(message.receiver.toString());
-            
+
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit('messageDeleted', {
                     messageId: message._id,
@@ -220,7 +226,7 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
                 });
             }
 
-            res.status(200).json({ 
+            res.status(200).json({
                 message: 'Message deleted for everyone',
                 data: populatedMessage
             });
@@ -231,7 +237,7 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
                 await message.save();
             }
 
-            res.status(200).json({ 
+            res.status(200).json({
                 message: 'Message deleted for you',
                 data: message
             });
@@ -280,7 +286,7 @@ router.delete('/clear/:userId', Authmiddlewhere, async (req, res) => {
             }
         }
 
-        res.status(200).json({ 
+        res.status(200).json({
             message: 'Chat cleared successfully',
             clearedCount: messages.length
         });
@@ -318,7 +324,7 @@ router.post('/block/:userId', Authmiddlewhere, async (req, res) => {
         currentUser.blockedUsers.push(userToBlockId);
 
         await currentUser.save();
-        res.status(200).json({ 
+        res.status(200).json({
             message: 'User blocked successfully',
             blockedUser: {
                 _id: userToBlock._id,
