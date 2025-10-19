@@ -168,37 +168,6 @@ io.on("connection", (socket) => {
             });
         }
     });
-
-    // ✅ Message deletion real-time update
-    socket.on("messageDeleted", async ({ messageId, deleteType, receiverId }) => {
-        try {
-            const receiverSocketId = onlineUsers.get(receiverId?.toString());
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("messageDeleted", {
-                    messageId,
-                    deletedForEveryone: deleteType === 'forEveryone'
-                });
-            }
-        } catch (error) {
-            console.error("❌ Error in messageDeleted socket:", error);
-        }
-    });
-
-    // ✅ Message edit real-time update
-    socket.on("messageEdited", async ({ messageId, newText, receiverId }) => {
-        try {
-            const receiverSocketId = onlineUsers.get(receiverId?.toString());
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("messageEdited", {
-                    messageId,
-                    text: newText,
-                    isEdited: true
-                });
-            }
-        } catch (error) {
-            console.error("❌ Error in messageEdited socket:", error);
-        }
-    });
 });
 
 // ✅ Start server
