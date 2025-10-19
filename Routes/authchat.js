@@ -6,7 +6,6 @@ const { Authmiddlewhere } = require('../middlewhere/Authmiddlewhere');
 const Message = require('../Schemas/Message');
 const User = require('../Schemas/User');
 
-// ADD THIS LOG
 console.log('📁 Chat routes file loaded!');
 
 // Multer setup
@@ -151,6 +150,19 @@ router.put('/edit/:messageId', Authmiddlewhere, async (req, res) => {
             .populate('sender', 'Username profilePicture')
             .populate('receiver', 'Username profilePicture');
 
+        // ✅ Emit real-time edit event to receiver
+        const io = req.app.get('socketio');
+        const onlineUsers = req.app.get('onlineUsers');
+        const receiverSocketId = onlineUsers.get(message.receiver.toString());
+        
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit('messageEdited', {
+                messageId: message._id,
+                text: message.text,
+                isEdited: true
+            });
+        }
+
         res.status(200).json({ 
             message: 'Message edited successfully',
             data: populatedMessage
@@ -179,12 +191,12 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
                 return res.status(403).json({ message: 'Only sender can delete for everyone' });
             }
 
-            const fifteenMinutes = 15 * 60 * 1000;
+            const twoDays = 2 * 24 * 60 * 60 * 1000;
             const messageAge = Date.now() - new Date(message.createdAt).getTime();
 
-            if (messageAge > fifteenMinutes) {
+            if (messageAge > twoDays) {
                 return res.status(400).json({ 
-                    message: 'Delete for everyone is only available within 15 minutes' 
+                    message: 'Delete for everyone is only available within 2 days' 
                 });
             }
 
@@ -195,6 +207,18 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
             const populatedMessage = await Message.findById(message._id)
                 .populate('sender', 'Username profilePicture')
                 .populate('receiver', 'Username profilePicture');
+
+            // ✅ Emit real-time delete event to receiver
+            const io = req.app.get('socketio');
+            const onlineUsers = req.app.get('onlineUsers');
+            const receiverSocketId = onlineUsers.get(message.receiver.toString());
+            
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit('messageDeleted', {
+                    messageId: message._id,
+                    deletedForEveryone: true
+                });
+            }
 
             res.status(200).json({ 
                 message: 'Message deleted for everyone',
@@ -222,7 +246,6 @@ router.delete('/delete/:messageId', Authmiddlewhere, async (req, res) => {
     }
 });
 
-// Clear chat history
 router.delete('/clear/:userId', Authmiddlewhere, async (req, res) => {
     try {
         const currentUserId = req.userID;
@@ -235,7 +258,6 @@ router.delete('/clear/:userId', Authmiddlewhere, async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Check if they are friends
         const areFriends = currentUser.friends.some(
             friendId => friendId.toString() === otherUserId
         );
@@ -244,7 +266,6 @@ router.delete('/clear/:userId', Authmiddlewhere, async (req, res) => {
             return res.status(403).json({ message: 'You can only clear chats with friends' });
         }
 
-        // Find all messages between these two users
         const messages = await Message.find({
             $or: [
                 { sender: currentUserId, receiver: otherUserId },
@@ -252,7 +273,6 @@ router.delete('/clear/:userId', Authmiddlewhere, async (req, res) => {
             ]
         });
 
-        // Add currentUserId to deletedFor array for each message
         for (let message of messages) {
             if (!message.deletedFor.includes(currentUserId)) {
                 message.deletedFor.push(currentUserId);
@@ -271,8 +291,6 @@ router.delete('/clear/:userId', Authmiddlewhere, async (req, res) => {
     }
 });
 
-// Block user
-// Update the Block user route in your backend
 router.post('/block/:userId', Authmiddlewhere, async (req, res) => {
     try {
         const currentUserId = req.userID;
@@ -289,17 +307,14 @@ router.post('/block/:userId', Authmiddlewhere, async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Initialize blockedUsers array if it doesn't exist
         if (!currentUser.blockedUsers) {
             currentUser.blockedUsers = [];
         }
 
-        // Check if already blocked
         if (currentUser.blockedUsers.includes(userToBlockId)) {
             return res.status(400).json({ message: 'User is already blocked' });
         }
 
-        // Add to blocked list
         currentUser.blockedUsers.push(userToBlockId);
 
         await currentUser.save();
@@ -317,7 +332,6 @@ router.post('/block/:userId', Authmiddlewhere, async (req, res) => {
     }
 });
 
-// Unblock user 
 router.delete('/unblock/:userId', Authmiddlewhere, async (req, res) => {
     try {
         const currentUserId = req.userID;
@@ -333,7 +347,6 @@ router.delete('/unblock/:userId', Authmiddlewhere, async (req, res) => {
             return res.status(400).json({ message: 'User is not blocked' });
         }
 
-        // Remove from blocked list
         currentUser.blockedUsers = currentUser.blockedUsers.filter(
             blockedId => blockedId.toString() !== userToUnblockId
         );
@@ -348,7 +361,6 @@ router.delete('/unblock/:userId', Authmiddlewhere, async (req, res) => {
     }
 });
 
-// Get blocked users list
 router.get('/blocked-users', Authmiddlewhere, async (req, res) => {
     try {
         const currentUserId = req.userID;
@@ -358,7 +370,6 @@ router.get('/blocked-users', Authmiddlewhere, async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Return array of blocked user IDs
         res.status(200).json(currentUser.blockedUsers || []);
 
     } catch (err) {
