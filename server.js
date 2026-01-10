@@ -35,16 +35,6 @@ app.use(cors({
 
 app.use(express.json());
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
-    message: 'Server is running',
-    timestamp: new Date(),
-    uptime: process.uptime(),
-    connectedUsers: connectedUsers.size
-  });
-});
-
 // ✅ DB Connection
 DBcnnctn();
 
@@ -74,6 +64,16 @@ const pendingNotifications = new Map();
 
 app.set('socketio', io);
 app.set('onlineUsers', onlineUsers);
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Chat server is running',
+    timestamp: new Date(),
+    uptime: process.uptime(),
+    connectedUsers: onlineUsers.size  
+  });
+});
 
 // ✅ Routes
 app.use('/api/auth', authuser);
