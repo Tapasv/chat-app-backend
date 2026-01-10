@@ -35,6 +35,16 @@ app.use(cors({
 
 app.use(express.json());
 
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Server is running',
+    timestamp: new Date(),
+    uptime: process.uptime(),
+    connectedUsers: connectedUsers.size
+  });
+});
+
 // ✅ DB Connection
 DBcnnctn();
 
