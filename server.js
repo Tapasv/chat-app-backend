@@ -65,13 +65,11 @@ const pendingNotifications = new Map();
 app.set('socketio', io);
 app.set('onlineUsers', onlineUsers);
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
-    message: 'Chat server is running',
-    timestamp: new Date(),
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
     uptime: process.uptime(),
-    connectedUsers: onlineUsers.size  
+    timestamp: Date.now()
   });
 });
 
