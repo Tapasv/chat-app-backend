@@ -1,84 +1,55 @@
-const { Worker } = require('bullmq');
-const { bullMQConnection } = require('../config/redis');
-const sendEmail = require('../utils/sendEmail');
-const userRepository = require('../repositories/user.repository');
+const Redis = require('ioredis');
+const logger = require('../utils/logger');
 
-let notificationWorker;
+const createClient = (options = {}) => {
+    const url = process.env.REDIS_URL;
+    if (!url) {
+        console.error('FATAL: REDIS_URL is not set');
+        process.exit(1);
+    }
 
-try {
-    notificationWorker = new Worker('notifications', async (job) => {
-        const { type, data } = job.data;
+    const client = new Redis(url, {
+        retryStrategy(times) {
+            if (times > 10) return null;
+            return Math.min(times * 50, 2000);
+        },
+        reconnectOnError() {
+            return true;
+        },
+        ...options
+    });
 
-        console.log(`🔧 Processing job: ${type} (attempt ${job.attemptsMade + 1})`);
+    client.on('error', (err) => {
+        console.error(`Redis client error: ${err.message}`);
+    });
 
-        if (type === 'offline_message_notification') {
-            const { receiverId, senderUsername, messageText, timestamp } = data;
+    return client;
+};
 
-            const receiver = await userRepository.findById(receiverId, 'Email Username');
-            if (!receiver || !receiver.Email) {
-                console.log(`⚠️ No email found for user ${receiverId}, skipping`);
-                return;
-            }
+// Created immediately — used by socket.io adapter at startup
+const redis = createClient({ maxRetriesPerRequest: 3 });
+const pubClient = createClient({ maxRetriesPerRequest: 3 });
+const subClient = createClient({ maxRetriesPerRequest: 3 });
 
-            const html = `
-                <h2>New message on Chatify</h2>
-                <p>Hi ${receiver.Username},</p>
-                <p><strong>${senderUsername}</strong> sent you a message:</p>
-                <blockquote style="border-left: 3px solid #e50914; padding-left: 12px; color: #555;">
-                    ${messageText}
-                </blockquote>
-                <p>Open Chatify to reply.</p>
-                <small style="color: #999;">Received at ${new Date(timestamp).toLocaleString()}</small>
-            `;
+redis.on('connect', () => logger.info('Redis connected'));
+redis.on('reconnecting', () => logger.warn('Redis reconnecting...'));
 
-            await sendEmail(receiver.Email, `New message from ${senderUsername}`, html);
-            console.log(`✅ Email notification sent to ${receiver.Email}`);
-            return;
+// bullMQConnection uses a lazy getter — only instantiated on first access.
+// This permanently breaks the circular dependency caused by:
+//   server.js → socket/index.js → config/redis.js (not finished yet)
+//                               → queues/ → config/redis.js (circular!)
+//                               → workers/ → config/redis.js (circular!)
+// The getter ensures bullMQConnection is only created after redis.js fully loads.
+let _bullMQConnection = null;
+
+module.exports = {
+    redis,
+    pubClient,
+    subClient,
+    get bullMQConnection() {
+        if (!_bullMQConnection) {
+            _bullMQConnection = createClient({ maxRetriesPerRequest: null });
         }
-
-        if (type === 'friend_request_notification') {
-            const { receiverId, senderUsername } = data;
-
-            const receiver = await userRepository.findById(receiverId, 'Email Username');
-            if (!receiver || !receiver.Email) return;
-
-            const html = `
-                <h2>New friend request on Chatify</h2>
-                <p>Hi ${receiver.Username},</p>
-                <p><strong>${senderUsername}</strong> sent you a friend request.</p>
-                <p>Open Chatify to accept or reject.</p>
-            `;
-
-            await sendEmail(receiver.Email, `Friend request from ${senderUsername}`, html);
-            console.log(`✅ Friend request email sent to ${receiver.Email}`);
-            return;
-        }
-
-        console.log(`⚠️ Unknown job type: ${type}`);
-
-    }, {
-        connection: bullMQConnection,
-        concurrency: 5
-    });
-
-    notificationWorker.on('completed', (job) => {
-        console.log(`✅ Job ${job.id} (${job.data.type}) completed`);
-    });
-
-    notificationWorker.on('failed', (job, err) => {
-        console.error(`❌ Job ${job?.id} failed (attempt ${job?.attemptsMade}): ${err.message}`);
-    });
-
-    notificationWorker.on('error', (err) => {
-        // Log but never crash the process — Redis blips shouldn't take down the server
-        console.error('❌ Worker error:', err.message);
-    });
-
-} catch (err) {
-    // Worker failed to initialize (e.g. Redis unreachable at startup)
-    // Log and continue — core chat still works without email notifications
-    console.error('❌ Notification worker failed to start:', err.message);
-    notificationWorker = null;
-}
-
-module.exports = notificationWorker;
+        return _bullMQConnection;
+    }
+};
