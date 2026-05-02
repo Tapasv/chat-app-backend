@@ -11,15 +11,11 @@ const messageSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    text: String, // Your main message field
-    
-    // File fields
+    text: String,
     fileUrl: String,
     fileName: String,
     fileSize: Number,
     fileType: String,
-    
-    // Edit/Delete fields
     isEdited: {
         type: Boolean,
         default: false
@@ -33,8 +29,14 @@ const messageSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     }
-}, { 
-    timestamps: true 
+}, {
+    timestamps: true
 });
+
+// Most critical index — speeds up conversation fetch
+messageSchema.index({ sender: 1, receiver: 1, createdAt: 1 });
+
+// For fetching all messages involving a user
+messageSchema.index({ receiver: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Message', messageSchema);

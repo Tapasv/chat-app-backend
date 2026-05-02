@@ -1,13 +1,13 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema(
     {
         Username: { type: String, required: true, unique: true },
         Password: { type: String, required: true },
-        role: { type: String, enum: ["Admin", "User"], default: "User" },
+        role: { type: String, enum: ['Admin', 'User'], default: 'User' },
         Email: { type: String, required: true, unique: true },
         refreshToken: { type: String },
-        friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+        friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
         profilePicture: { type: String, default: null },
         resetPasswordToken: { type: String },
         resetPasswordExpires: { type: Date },
@@ -20,6 +20,14 @@ const UserSchema = new mongoose.Schema(
         newEmail: { type: String },
         emailChangeExpires: { type: Date }
     }
-)
+);
 
-module.exports = mongoose.model("User", UserSchema)
+// For username search (regex queries)
+UserSchema.index({ Username: 'text' });
+
+// For token lookups
+UserSchema.index({ refreshToken: 1 });
+UserSchema.index({ resetPasswordToken: 1 });
+UserSchema.index({ emailChangeToken: 1 });
+
+module.exports = mongoose.model('User', UserSchema);
