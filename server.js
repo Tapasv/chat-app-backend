@@ -41,9 +41,14 @@ app.use(morgan('combined', {
     skip: (req) => req.path === '/health'
 }));
 
+// Uploads directory — only on non-ephemeral filesystems
 const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-app.use('/uploads', express.static(uploadDir));
+try {
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    app.use('/uploads', express.static(uploadDir));
+} catch {
+    // On Render, local file storage isn't persistent — use Cloudinary instead
+}
 
 const io = initSocket(server);
 app.set('socketio', io);

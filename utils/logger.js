@@ -1,26 +1,47 @@
 const winston = require('winston');
 const path = require('path');
+const fs = require('fs');
 
 const { combine, timestamp, errors, json, colorize, printf } = winston.format;
 
-// Add http level support (used by Morgan)
 winston.addColors({ http: 'magenta' });
 
-// Human readable format for development
 const devFormat = printf(({ level, message, timestamp, stack }) => {
     return `${timestamp} [${level}]: ${stack || message}`;
 });
 
-// JSON format for production — easy to parse by log aggregators
 const prodFormat = combine(
     timestamp(),
     errors({ stack: true }),
     json()
 );
 
+// Only create file transports if we can write to disk
+const isProduction = process.env.NODE_ENV === 'production';
+const fileTransports = [];
+
+if (!isProduction) {
+    const logDir = path.join(process.cwd(), 'logs');
+    if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+    }
+
+    fileTransports.push(
+        new winston.transports.File({
+            filename: path.join(logDir, 'error.log'),
+            level: 'error',
+            format: prodFormat
+        }),
+        new winston.transports.File({
+            filename: path.join(logDir, 'combined.log'),
+            format: prodFormat
+        })
+    );
+}
+
 const logger = winston.createLogger({
-    level: process.env.NODE_ENV === 'production' ? 'info' : 'http',
-    format: process.env.NODE_ENV === 'production'
+    level: isProduction ? 'info' : 'http',
+    format: isProduction
         ? prodFormat
         : combine(
             colorize(),
@@ -30,31 +51,15 @@ const logger = winston.createLogger({
         ),
     transports: [
         new winston.transports.Console(),
-
-        // Error logs go to separate file
-        new winston.transports.File({
-            filename: path.join('logs', 'error.log'),
-            level: 'error',
-            format: prodFormat
-        }),
-
-        // All logs combined
-        new winston.transports.File({
-            filename: path.join('logs', 'combined.log'),
-            format: prodFormat
-        })
+        ...fileTransports
     ],
     exceptionHandlers: [
-        new winston.transports.File({
-            filename: path.join('logs', 'exceptions.log'),
-            format: prodFormat
-        })
+        new winston.transports.Console(),
+        ...(!isProduction ? fileTransports : [])
     ],
     rejectionHandlers: [
-        new winston.transports.File({
-            filename: path.join('logs', 'rejections.log'),
-            format: prodFormat
-        })
+        new winston.transports.Console(),
+        ...(!isProduction ? fileTransports : [])
     ]
 });
 
