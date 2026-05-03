@@ -41,7 +41,7 @@ app.use(morgan('combined', {
     skip: (req) => req.path === '/health'
 }));
 
-// Uploads directory — only on non-ephemeral filesystems
+// Uploads directory — only on non-ephemeral file
 const uploadDir = path.join(__dirname, 'uploads');
 try {
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
