@@ -4,7 +4,6 @@ const cacheService = require('../../services/cache.service');
 const notificationService = require('../../services/notification.service');
 const { redis } = require('../../config/redis');
 
-// Socket-level rate limiter — 30 messages per minute per user
 const checkSocketRateLimit = async (userId) => {
     const key = `chatify:rl:socket:${userId}`;
     const count = await redis.incr(key);
@@ -18,7 +17,6 @@ const messageHandler = (io, socket) => {
         try {
             const userId = socket.handshake.auth.userid?.toString();
 
-            // Check socket rate limit
             const allowed = await checkSocketRateLimit(userId);
             if (!allowed) {
                 if (ack) ack({ status: 'error', message: 'You are sending messages too fast' });
@@ -95,6 +93,37 @@ const messageHandler = (io, socket) => {
         } catch (err) {
             console.error('❌ sendPrivateMessage error:', err.message);
             if (ack) ack({ status: 'error', message: 'Message failed to send' });
+        }
+    });
+
+    // Mark messages as read
+    socket.on('markAsRead', async ({ senderId, receiverId }) => {
+        try {
+            const now = new Date();
+
+            // Mark all unread messages from sender to receiver as read
+            await Message.updateMany(
+                {
+                    sender: senderId,
+                    receiver: receiverId,
+                    readAt: null
+                },
+                { $set: { readAt: now } }
+            );
+
+            // Invalidate cache so next fetch reflects read status
+            await cacheService.invalidateConversation(senderId, receiverId);
+
+            // Notify sender that their messages were read
+            const senderSocketId = await cacheService.getSocketId(senderId);
+            if (senderSocketId) {
+                io.to(senderSocketId).emit('messagesRead', {
+                    by: receiverId,
+                    at: now
+                });
+            }
+        } catch (err) {
+            console.error('❌ markAsRead error:', err.message);
         }
     });
 
