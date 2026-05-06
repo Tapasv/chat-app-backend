@@ -19,7 +19,8 @@ const UserSchema = new mongoose.Schema(
         emailChangeToken: { type: String },
         newEmail: { type: String },
         emailChangeExpires: { type: Date }
-    }
+    },
+     { timestamps: true }
 );
 
 // For username search (regex queries)

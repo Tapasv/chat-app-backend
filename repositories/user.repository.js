@@ -77,6 +77,19 @@ const userRepository = {
         const query = { Email: email };
         if (excludeId) query._id = { $ne: excludeId };
         return User.findOne(query);
+    },
+
+    findAllPaginated: (page = 1, limit = 10) => {
+        const skip = (page - 1) * limit;
+        return User.find()
+            .select('-Password -refreshToken')
+            .skip(skip)
+            .limit(limit)
+            .sort({ _id: 1 }); // _id always exists and is consistent
+    },
+
+    countAll: () => {
+        return User.countDocuments();
     }
 };
 
